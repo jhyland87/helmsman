@@ -1,0 +1,10 @@
+# pnpm 11 records build-script approvals here. These packages ship native
+# binaries via install scripts; approving them lets Vite + Tailwind build.
+# Without this, pnpm aborts installs with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  esbuild: true
+  '@tailwindcss/oxide': true
+minimumReleaseAgeExclude:
+  - '@types/chrome@0.1.43'
+  - '@types/node@25.9.2'
+  - '@types/react@19.2.17'

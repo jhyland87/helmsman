@@ -1,0 +1,15 @@
+
+{"content-type":["text/html"],
+"location":["at_a_glance.jst"],
+"set-cookie":["DUKSID=jst_sess9g7kZgrY3tlS183bitaMD4wbg6JuJCUd; httponly"],
+"x-frame-options":["deny"],
+"x-xss-protection":["1; mode=block"],
+"x-content-type-options":["nosniff"],
+"strict-transport-security":["max-age=15768000; includeSubdomains"],
+"pragma":["no-cache"],
+"cache-control":["no-store, no-cache, must-revalidate"],
+"content-security-policy":["default-src 'self' ; style-src 'self' ; frame-src 'self' ; font-src 'self' ; form-action 'self' ; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self'; connect-src 'self'; object-src 'none'; media-src 'none'; script-nonce 'none'; plugin-types 'none'; reflected-xss 'none'; report-uri 'none';"],
+"content-length":["1"],
+"date":["Thu, 01 Jan 1970 07:41:21 GMT"],
+"server":["Xfinity Broadband Router Server"]
+}

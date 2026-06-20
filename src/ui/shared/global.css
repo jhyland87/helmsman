@@ -1,0 +1,61 @@
+/*
+ * Tailwind v4, CSS-first. We import theme + utilities but deliberately omit the
+ * preflight reset so MUI's <CssBaseline> owns the baseline (avoids conflicts).
+ */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+}
+
+/* Keep panel content above the optional webcam background layer. */
+.helmsman-content {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * HUD (heads-up display) mode — active when the webcam feed is the popup
+ * background. Panels render semi-transparent so the feed shows through, and
+ * fade to full theme opacity on hover (and back on leave). Modeled on the
+ * Fluidd custom CSS in dev/example-css-custom-style-for-fluidd.css.
+ */
+:root {
+  --helmsman-hud-card: rgb(0 0 0 / 25%);
+  --helmsman-hud-title: rgb(0 0 0 / 20%);
+  --helmsman-hud-hover-opacity: 75%;
+  --helmsman-hud-transition: background-color 0.5s;
+  --helmsman-hud-transition-fn: cubic-bezier(0.29, 1.01, 1, -0.68);
+}
+
+/* Transition applies in both states so it fades in AND back out. */
+.helmsman-hud .helmsman-panel,
+.helmsman-hud .helmsman-panel-title {
+  transition: var(--helmsman-hud-transition);
+  transition-timing-function: var(--helmsman-hud-transition-fn);
+}
+
+/* Un-hovered panels go translucent. */
+.helmsman-hud .helmsman-panel:not(:hover) {
+  background-color: var(--helmsman-hud-card);
+}
+
+.helmsman-hud .helmsman-panel:not(:hover) .helmsman-panel-title {
+  background-color: var(--helmsman-hud-title);
+}
+
+/* Hovering brings the theme background back, but only to ~90% — still a
+ * little see-through. Uses the MUI palette CSS variable so it tracks the
+ * light/dark theme. */
+.helmsman-hud .helmsman-panel:hover {
+  background-color: color-mix(
+    in srgb,
+    var(--mui-palette-background-paper) var(--helmsman-hud-hover-opacity),
+    transparent
+  );
+}
