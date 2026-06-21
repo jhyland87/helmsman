@@ -4,6 +4,7 @@
  * Any panel can be maximized to fill the popup (transient view state).
  */
 import { Box } from '@mui/material';
+import { useLayoutEffect, useRef, useState } from 'react';
 
 import type { PrinterSnapshot } from '@/core/model/PrinterSnapshot';
 import type { DashboardCard, PanelId } from '@/core/settings/schema';
@@ -11,6 +12,35 @@ import { PANELS, type PanelDefinition } from '@/ui/panels/registry';
 import { useT } from '@/ui/shared/i18n';
 import { useDashboard } from '@/ui/shared/state/useDashboard';
 import { Panel } from './Panel';
+
+/** Breathing room below a maximized panel (matches the page's bottom padding). */
+const FILL_MARGIN = 24;
+
+/**
+ * Measures the distance from an element's top to the bottom of the viewport so a
+ * maximized panel can fill the remaining space — adapting to both the fixed-size
+ * popup and a full browser tab without hardcoded heights.
+ */
+function useFillHeight(active: boolean) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [height, setHeight] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!active) {
+      setHeight(undefined);
+      return undefined;
+    }
+    const measure = (): void => {
+      const el = ref.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top;
+      setHeight(Math.max(200, Math.round(window.innerHeight - top - FILL_MARGIN)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [active]);
+  return { ref, height };
+}
 
 export function Dashboard({
   printerId,
@@ -23,6 +53,7 @@ export function Dashboard({
   const { dashboard, toggleCollapse, update } = useDashboard(printerId);
   // Persisted so the maximized view resumes when the popup reopens.
   const maximized = dashboard.maximizedPanel;
+  const { ref: fillRef, height: fillHeight } = useFillHeight(maximized !== undefined);
 
   const isAvailable = (def: PanelDefinition): boolean =>
     !def.isAvailable || def.isAvailable(snapshot);
@@ -37,16 +68,20 @@ export function Dashboard({
       const Component = def.component;
       const Actions = def.actions;
       return (
-        <Panel
-          title={t(def.titleKey)}
-          collapsed={false}
-          onToggleCollapse={() => undefined}
-          maximized
-          onToggleMaximize={() => update({ maximizedPanel: undefined })}
-          action={Actions ? <Actions printerId={printerId} snapshot={snapshot} maximized /> : undefined}
-        >
-          <Component printerId={printerId} snapshot={snapshot} maximized />
-        </Panel>
+        <Box ref={fillRef} sx={{ height: fillHeight }}>
+          <Panel
+            title={t(def.titleKey)}
+            collapsed={false}
+            onToggleCollapse={() => undefined}
+            maximized
+            onToggleMaximize={() => update({ maximizedPanel: undefined })}
+            action={
+              Actions ? <Actions printerId={printerId} snapshot={snapshot} maximized /> : undefined
+            }
+          >
+            <Component printerId={printerId} snapshot={snapshot} maximized />
+          </Panel>
+        </Box>
       );
     }
   }

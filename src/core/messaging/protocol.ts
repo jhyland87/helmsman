@@ -125,7 +125,7 @@ export type BackgroundRequest =
   | ({ type: RequestType.GET_HISTORY_TOTALS } & ForPrinter)
   | ({ type: RequestType.GET_JOB_QUEUE } & ForPrinter)
   | ({ type: RequestType.GET_SYSTEM_INFO } & ForPrinter)
-  | ({ type: RequestType.GET_CONSOLE_BACKLOG } & ForPrinter)
+  | ({ type: RequestType.GET_CONSOLE_BACKLOG; count?: number } & ForPrinter)
   | ({ type: RequestType.LIST_FILES } & ForPrinter)
   | ({ type: RequestType.GET_GCODE_METADATA } & ForPrinter)
   | ({ type: RequestType.DELETE_FILE; path: string } & ForPrinter)

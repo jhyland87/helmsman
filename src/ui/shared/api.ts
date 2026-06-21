@@ -64,10 +64,11 @@ export const api = {
     sendRequest<JobQueueStatus>({ type: RequestType.GET_JOB_QUEUE, printerId }),
   getSystemInfo: (printerId: string) =>
     sendRequest<MachineSystemInfo>({ type: RequestType.GET_SYSTEM_INFO, printerId }),
-  getConsoleBacklog: (printerId: string) =>
+  getConsoleBacklog: (printerId: string, count?: number) =>
     sendRequest<readonly GcodeLogLine[]>({
       type: RequestType.GET_CONSOLE_BACKLOG,
       printerId,
+      count,
     }),
   listFiles: (printerId: string) =>
     sendRequest<readonly FileEntry[]>({ type: RequestType.LIST_FILES, printerId }),

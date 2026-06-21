@@ -30,7 +30,10 @@ export function Panel({
   const showContent = maximized || !collapsed;
 
   return (
-    <Card className="helmsman-panel">
+    <Card
+      className="helmsman-panel"
+      sx={maximized ? { height: '100%', display: 'flex', flexDirection: 'column' } : undefined}
+    >
       <Box
         className="helmsman-panel-title"
         sx={{
@@ -39,6 +42,7 @@ export function Panel({
           gap: 1,
           px: 1.5,
           py: 0.75,
+          flexShrink: 0,
           cursor: maximized ? 'default' : 'pointer',
           borderBottom: showContent ? 1 : 'none',
           borderColor: 'divider',
@@ -74,7 +78,9 @@ export function Panel({
         )}
       </Box>
       {maximized ? (
-        <Box sx={{ p: 1.5 }}>{children}</Box>
+        <Box sx={{ p: 1.5, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          {children}
+        </Box>
       ) : (
         <Collapse in={!collapsed} unmountOnExit>
           <Box sx={{ p: 1.5 }}>{children}</Box>

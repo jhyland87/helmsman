@@ -6,6 +6,7 @@
  * specified. Heaters get an inline target-setter.
  */
 import { Box, Fade, Stack, TextField, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   CartesianGrid,
@@ -13,6 +14,7 @@ import {
   LineChart,
   ResponsiveContainer,
   Tooltip,
+  type TooltipContentProps,
   XAxis,
   YAxis,
 } from 'recharts';
@@ -83,6 +85,55 @@ const buildChartData = (
 
 const formatTime = (t: number): string =>
   new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+/**
+ * Themed, semi-transparent hover tooltip. Merges each source's actual + target
+ * series onto one compact line (`Bed: 35.1 / 35.0 °C`).
+ */
+function ChartTooltip({ active, payload, label }: TooltipContentProps): JSX.Element | null {
+  if (!active || !payload || payload.length === 0) return null;
+  const byKey = new Map(payload.map((entry) => [String(entry.dataKey), entry]));
+  const rows = payload
+    .filter((entry) => !String(entry.dataKey).endsWith(TARGET_SUFFIX))
+    .map((entry) => {
+      const target = byKey.get(`${String(entry.dataKey)}${TARGET_SUFFIX}`);
+      return {
+        key: String(entry.dataKey),
+        name: typeof entry.name === 'string' ? entry.name : String(entry.dataKey),
+        color: entry.color ?? 'inherit',
+        value: typeof entry.value === 'number' ? entry.value : undefined,
+        target: typeof target?.value === 'number' ? target.value : undefined,
+      };
+    });
+
+  return (
+    <Box
+      sx={{
+        bgcolor: (theme) => alpha(theme.palette.background.paper, 0.82),
+        color: 'text.primary',
+        border: 1,
+        borderColor: 'divider',
+        borderRadius: 1,
+        boxShadow: 3,
+        px: 1,
+        py: 0.5,
+        backdropFilter: 'blur(2px)',
+        fontSize: 11,
+        lineHeight: 1.4,
+      }}
+    >
+      <Box sx={{ color: 'text.secondary', fontSize: 10, mb: 0.25 }}>
+        {formatTime(Number(label))}
+      </Box>
+      {rows.map((row) => (
+        <Box key={row.key} sx={{ color: row.color, whiteSpace: 'nowrap' }}>
+          {row.name}: {row.value !== undefined ? row.value.toFixed(1) : '—'}
+          {row.target !== undefined ? ` / ${row.target.toFixed(1)}` : ''} °C
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 /**
  * Y-axis upper bound with headroom so lines near the top (e.g. a 220°C target)
@@ -193,8 +244,10 @@ export function TemperaturePanel({ printerId, snapshot, maximized }: PanelProps)
   }
 
   return (
-    <Stack spacing={1}>
-      <Box sx={{ width: '100%', height: maximized ? 440 : 220 }}>
+    <Stack spacing={1} sx={maximized ? { height: '100%' } : undefined}>
+      <Box
+        sx={{ width: '100%', ...(maximized ? { flex: 1, minHeight: 0 } : { height: 220 }) }}
+      >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
             <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
@@ -208,10 +261,7 @@ export function TemperaturePanel({ printerId, snapshot, maximized }: PanelProps)
               tick={{ fontSize: 10 }}
             />
             <YAxis width={40} tick={{ fontSize: 10 }} domain={[0, yAxisMax]} />
-            <Tooltip
-              labelFormatter={(label) => formatTime(Number(label))}
-              formatter={(value) => `${Number(value).toFixed(1)} °C`}
-            />
+            <Tooltip content={(props) => <ChartTooltip {...props} />} />
             {sources.map((source) => (
               <Line
                 key={source.key}

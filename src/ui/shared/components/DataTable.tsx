@@ -91,6 +91,8 @@ export interface DataTableProps<T> {
   readonly isEmpty?: boolean;
   readonly emptyMessage?: string;
   readonly maxHeight?: number;
+  /** Fill the parent's height (flex) instead of using `maxHeight`. */
+  readonly fillHeight?: boolean;
   readonly tableSx?: object;
 }
 
@@ -192,6 +194,7 @@ export function DataTable<T>({
   isEmpty,
   emptyMessage,
   maxHeight,
+  fillHeight,
   tableSx,
 }: DataTableProps<T>): JSX.Element {
   const { settings, update } = useSettings();
@@ -303,8 +306,8 @@ export function DataTable<T>({
   const clickable = selection !== undefined || onRowClick !== undefined;
 
   return (
-    <Stack spacing={1}>
-      <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
+    <Stack spacing={1} sx={fillHeight ? { flex: 1, minHeight: 0 } : undefined}>
+      <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
         {toolbar ?? <Box sx={{ flexGrow: 1 }} />}
         {configColumns.length > 0 && (
           <IconButton
@@ -317,7 +320,7 @@ export function DataTable<T>({
         )}
       </Stack>
 
-      <Box sx={{ overflow: 'auto', maxHeight }}>
+      <Box sx={{ overflow: 'auto', ...(fillHeight ? { flex: 1, minHeight: 0 } : { maxHeight }) }}>
         <Table size="small" sx={tableSx}>
           <TableHead>
             <TableRow>

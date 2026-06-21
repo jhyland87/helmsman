@@ -159,7 +159,7 @@ export function OptionsApp(): JSX.Element {
         </List>
       </Box>
 
-      <Box sx={{ flexGrow: 1, p: 3, maxWidth: 1200 }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2 }}>
           <PrinterSelector
             activePrinterId={settings.activePrinterId}

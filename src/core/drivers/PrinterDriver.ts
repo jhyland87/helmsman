@@ -100,8 +100,11 @@ export interface PrinterDriver {
   getHistoryTotals(): Promise<HistoryTotalsResult>;
   getJobQueue(): Promise<JobQueueStatus>;
   getSystemInfo(): Promise<MachineSystemInfo>;
-  /** Recent buffered console lines, for backfilling a console view. */
-  getConsoleBacklog(): Promise<readonly GcodeLogLine[]>;
+  /**
+   * Recent buffered console lines (commands + responses) for a console view.
+   * @param count - Max entries to return; omit for the printer's full store.
+   */
+  getConsoleBacklog(count?: number): Promise<readonly GcodeLogLine[]>;
   /** Flat list of g-code files (the file browser builds a tree from the paths). */
   listGcodeFiles(): Promise<readonly FileEntry[]>;
   /** Bulk g-code metadata map (keyed by filename) for the file browser columns. */

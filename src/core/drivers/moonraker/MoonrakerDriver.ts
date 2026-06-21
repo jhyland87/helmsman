@@ -362,8 +362,8 @@ export class MoonrakerDriver implements PrinterDriver {
     return this.requireClient().getMachineSystemInfo();
   }
 
-  async getConsoleBacklog(): Promise<readonly GcodeLogLine[]> {
-    const entries = await this.requireClient().getGcodeStore();
+  async getConsoleBacklog(count?: number): Promise<readonly GcodeLogLine[]> {
+    const entries = await this.requireClient().getGcodeStore(count);
     return entries.map((e) => ({
       t: e.time * 1000,
       message: e.message,

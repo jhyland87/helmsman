@@ -69,7 +69,7 @@ export function WebcamPanel({ snapshot, maximized }: PanelProps): JSX.Element {
   };
 
   return (
-    <Stack spacing={1}>
+    <Stack spacing={1} sx={maximized ? { height: '100%' } : undefined}>
       {webcams.length > 1 && (
         <Select size="small" value={index} onChange={(e) => setIndex(Number(e.target.value))}>
           {webcams.map((w, i) => (
@@ -91,6 +91,7 @@ export function WebcamPanel({ snapshot, maximized }: PanelProps): JSX.Element {
           borderRadius: 1,
           lineHeight: 0,
           cursor: zoomOn ? 'zoom-out' : 'zoom-in',
+          ...(maximized ? { flex: 1, minHeight: 0, display: 'flex' } : {}),
         }}
       >
         <Box
@@ -99,9 +100,9 @@ export function WebcamPanel({ snapshot, maximized }: PanelProps): JSX.Element {
           alt={webcam.name}
           sx={{
             width: '100%',
-            maxHeight: maximized ? 460 : undefined,
             objectFit: 'contain',
             display: 'block',
+            ...(maximized ? { height: '100%', minHeight: 0 } : {}),
             transform: transform || undefined,
             transformOrigin: `${origin.x}% ${origin.y}%`,
             transition: 'transform 60ms linear',

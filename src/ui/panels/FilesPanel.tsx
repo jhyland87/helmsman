@@ -678,7 +678,7 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
   );
 
   return (
-    <Stack spacing={1}>
+    <Stack spacing={1} sx={maximized ? { height: '100%' } : undefined}>
       {error && (
         <Typography variant="body2" color="error">
           {error}
@@ -700,7 +700,8 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
         onRowContextMenu={(file, e) => openMenu(e, file.path)}
         isEmpty={!loading && folders.length === 0 && filesHere.length === 0}
         emptyMessage="No files here."
-        maxHeight={maximized ? 520 : 320}
+        maxHeight={320}
+        fillHeight={Boolean(maximized)}
         tableSx={{ whiteSpace: 'nowrap' }}
         toolbar={
           <>

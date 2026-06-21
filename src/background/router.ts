@@ -155,7 +155,7 @@ export class MessageRouter {
       case RequestType.GET_SYSTEM_INFO:
         return this.manager.getDriver(request.printerId).getSystemInfo();
       case RequestType.GET_CONSOLE_BACKLOG:
-        return this.manager.getDriver(request.printerId).getConsoleBacklog();
+        return this.manager.getDriver(request.printerId).getConsoleBacklog(request.count);
       case RequestType.LIST_FILES:
         return this.manager.getDriver(request.printerId).listGcodeFiles();
       case RequestType.GET_GCODE_METADATA:

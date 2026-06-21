@@ -56,7 +56,7 @@ export function Popup(): JSX.Element {
   return (
     <Box
       className={webcam ? 'helmsman-hud' : undefined}
-      sx={{ width: POPUP_WIDTH, maxHeight: POPUP_MAX_HEIGHT, overflowY: 'auto', position: 'relative' }}
+      sx={{ width: POPUP_WIDTH, height: POPUP_MAX_HEIGHT, overflowY: 'auto', position: 'relative' }}
     >
       <WebcamBackground webcam={webcam} />
       <Box className="helmsman-content" sx={{ p: 1.5 }}>
