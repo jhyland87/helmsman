@@ -47,19 +47,28 @@ export default defineConfig({
           chunk.name === 'background' ? 'background.js' : 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
         assetFileNames: 'assets/[name]-[hash].[ext]',
-        // Name third-party code explicitly; otherwise the shared chunk gets
-        // named after an arbitrary first-party module it contains (which made
-        // the React+MUI+Recharts bundle masquerade as "PrinterSelector").
-        // The Recharts dependency family is deliberately left unassigned so it
-        // follows the lazy-loaded TemperaturePanel into its own async chunk
-        // instead of bloating the eagerly-parsed vendor bundle.
+        // Split third-party code into a few stable, named chunks instead of one
+        // monolithic "vendor" bundle: the React runtime, the MUI/Emotion UI
+        // stack, and @dnd-kit each get their own file (better caching + parallel
+        // parse, and no single >500 KB chunk). The Recharts dependency family is
+        // deliberately left unassigned so it follows the lazy-loaded
+        // TemperaturePanel into its own async chunk instead of the eager bundle.
+        // Explicit names also stop the shared chunk from being named after an
+        // arbitrary first-party module it happens to contain.
         manualChunks: (id) => {
           if (!id.includes('node_modules')) return undefined;
-          const lazyChart =
+          if (
             /node_modules\/(recharts|victory-vendor|d3-[^/]+|decimal\.js-light|@reduxjs|immer|react-redux|es-toolkit|reselect|use-sync-external-store)\//.test(
               id,
-            );
-          return lazyChart ? undefined : 'vendor';
+            )
+          ) {
+            return undefined;
+          }
+          // pnpm encodes packages as `.pnpm/<name>@<version>` (scopes use `+`).
+          if (/node_modules\/\.pnpm\/(react|react-dom|scheduler)@/.test(id)) return 'react';
+          if (/node_modules\/\.pnpm\/(@mui|@emotion|@popperjs|stylis)[@+]/.test(id)) return 'mui';
+          if (/node_modules\/\.pnpm\/@dnd-kit[@+]/.test(id)) return 'dnd';
+          return 'vendor';
         },
       },
     },
