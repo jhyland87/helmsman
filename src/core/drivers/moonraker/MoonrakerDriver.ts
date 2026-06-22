@@ -379,12 +379,28 @@ export class MoonrakerDriver implements PrinterDriver {
     return this.requireClient().getDatabaseItem<GcodeMetadataMap>('gcode_metadata');
   }
 
-  async deleteGcodeFile(path: string): Promise<void> {
-    await this.requireClient().deleteFile(`gcodes/${path}`);
+  async deleteGcodeEntry(path: string, isDir: boolean): Promise<void> {
+    await this.requireClient().delete(`gcodes/${path}`, { recursive: isDir });
   }
 
-  async moveGcodeFile(source: string, dest: string): Promise<void> {
-    await this.requireClient().moveFile(`gcodes/${source}`, `gcodes/${dest}`);
+  async moveGcodeEntry(source: string, dest: string): Promise<void> {
+    await this.requireClient().move(`gcodes/${source}`, `gcodes/${dest}`);
+  }
+
+  /** Largest thumbnail for a g-code file as a `data:` URL (fetched in the SW). */
+  async getGcodeThumbnail(path: string): Promise<string | undefined> {
+    const client = this.requireClient();
+    const meta = await client.getFileMetadata(path);
+    const thumb = meta.thumbnails.reduce<GcodeThumbnail | undefined>(
+      (best, t) => (t.width > (best?.width ?? 0) ? t : best),
+      undefined,
+    );
+    if (!thumb) return undefined;
+    const dir = path.includes('/') ? `${path.slice(0, path.lastIndexOf('/'))}/` : '';
+    const rel = `${dir}${thumb.relative_path}`.split('/').map(encodeURIComponent).join('/');
+    const res = await fetch(`${client.httpBaseUrl}/server/files/gcodes/${rel}`);
+    if (!res.ok) return undefined;
+    return responseToDataUrl(res);
   }
 
   getFileDownloadUrl(path: string): string {

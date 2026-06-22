@@ -109,10 +109,12 @@ export interface PrinterDriver {
   listGcodeFiles(): Promise<readonly FileEntry[]>;
   /** Bulk g-code metadata map (keyed by filename) for the file browser columns. */
   getGcodeMetadata(): Promise<GcodeMetadataMap>;
-  /** Delete a g-code file by its gcodes-relative path. */
-  deleteGcodeFile(path: string): Promise<void>;
-  /** Move/rename a g-code file (both paths gcodes-relative). */
-  moveGcodeFile(source: string, dest: string): Promise<void>;
+  /** Delete a g-code file, or a directory (recursively) when `isDir`. */
+  deleteGcodeEntry(path: string, isDir: boolean): Promise<void>;
+  /** Move/rename a g-code file or directory (both paths gcodes-relative). */
+  moveGcodeEntry(source: string, dest: string): Promise<void>;
+  /** Largest embedded thumbnail for a g-code file as a data URL, if any. */
+  getGcodeThumbnail(path: string): Promise<string | undefined>;
   /** Absolute HTTP URL for downloading a g-code file. */
   getFileDownloadUrl(path: string): string;
   /** Parse slicer settings embedded in a g-code file (gcodes-relative path). */

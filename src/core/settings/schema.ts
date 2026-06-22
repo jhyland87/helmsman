@@ -111,6 +111,8 @@ export interface AppSettings {
   readonly webcamBackground: boolean;
   /** Per-table UI state (column visibility/order + sort), keyed by table id. */
   readonly tables: Readonly<Record<string, TableState>>;
+  /** Collapse the options-page left nav to an icon-only rail. */
+  readonly navCollapsed: boolean;
   /** Require a confirmation prompt before sending an emergency stop. */
   readonly confirmEmergencyStop: boolean;
   /** Require a confirmation prompt before pausing/cancelling a print. */
@@ -200,6 +202,7 @@ export const defaultAppSettings = (): AppSettings => ({
   dashboardStorage: DashboardStorageMode.PRINTER_DB,
   webcamBackground: false,
   tables: {},
+  navCollapsed: false,
   confirmEmergencyStop: true,
   confirmPrintActions: true,
 });

@@ -38,6 +38,8 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Paper,
+  Popper,
   Stack,
   Table,
   TableBody,
@@ -136,26 +138,180 @@ const dirName = (path: string): string =>
   path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 const joinPath = (dir: string, name: string): string => (dir ? `${dir}/${name}` : name);
 
-/** Immediate subfolders + files directly under `dir` (''=root). */
-const listDir = (
-  files: readonly FileEntry[],
-  dir: string,
-): { folders: string[]; files: FileEntry[] } => {
+/** A folder shown in the file browser, with stats aggregated from its contents. */
+interface FolderInfo {
+  readonly name: string;
+  /** gcodes-relative folder path. */
+  readonly path: string;
+  /** Recursive total size of contained files (bytes). */
+  readonly size: number;
+  /** Most-recent modified time among contained files (unix seconds). */
+  readonly modified?: number;
+  /** Immediate child files and subfolders. */
+  readonly fileCount: number;
+  readonly folderCount: number;
+}
+
+/** A row in the browser: either a subfolder or a file. */
+type FileRow =
+  | { readonly kind: 'folder'; readonly key: string; readonly folder: FolderInfo }
+  | { readonly kind: 'file'; readonly key: string; readonly file: FileEntry };
+
+/** A move/delete/rename target: a gcodes-relative path plus whether it's a dir. */
+interface FileTarget {
+  readonly path: string;
+  readonly isDir: boolean;
+}
+
+/** Selection keys encode the kind so folders and files can be told apart. */
+const parseKey = (key: string): FileTarget => ({
+  isDir: key.startsWith('d:'),
+  path: key.slice(2),
+});
+
+/** Build the rows under `dir` (''=root): subfolders (with stats) then files. */
+const listEntries = (files: readonly FileEntry[], dir: string): FileRow[] => {
   const prefix = dir ? `${dir}/` : '';
-  const folders = new Set<string>();
   const here: FileEntry[] = [];
+  const folderNames = new Set<string>();
   for (const file of files) {
     if (!file.path.startsWith(prefix)) continue;
     const rest = file.path.slice(prefix.length);
     const slash = rest.indexOf('/');
     if (slash === -1) here.push(file);
-    else folders.add(rest.slice(0, slash));
+    else folderNames.add(rest.slice(0, slash));
   }
-  return {
-    folders: [...folders].sort((a, b) => a.localeCompare(b)),
-    files: here.sort((a, b) => baseName(a.path).localeCompare(baseName(b.path))),
-  };
+
+  const folders: FolderInfo[] = [...folderNames]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const path = prefix + name;
+      const childPrefix = `${path}/`;
+      let size = 0;
+      let modified: number | undefined;
+      let fileCount = 0;
+      const subdirs = new Set<string>();
+      for (const file of files) {
+        if (!file.path.startsWith(childPrefix)) continue;
+        const tail = file.path.slice(childPrefix.length);
+        const slash = tail.indexOf('/');
+        if (slash === -1) fileCount += 1;
+        else subdirs.add(tail.slice(0, slash));
+        size += file.size ?? 0;
+        if (file.modified !== undefined && (modified === undefined || file.modified > modified)) {
+          modified = file.modified;
+        }
+      }
+      return { name, path, size, modified, fileCount, folderCount: subdirs.size };
+    });
+
+  return [
+    ...folders.map((folder): FileRow => ({ kind: 'folder', key: `d:${folder.path}`, folder })),
+    ...here
+      .sort((a, b) => baseName(a.path).localeCompare(baseName(b.path)))
+      .map((file): FileRow => ({ kind: 'file', key: `f:${file.path}`, file })),
+  ];
 };
+
+/** File name + a hover thumbnail preview (fetched lazily via the background). */
+function FileNameCell({ printerId, file }: { printerId: string; file: FileEntry }): JSX.Element {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  // undefined = not fetched; null = no thumbnail; string = data URL.
+  const [thumb, setThumb] = useState<string | null>();
+
+  const onEnter = (e: MouseEvent<HTMLElement>): void => {
+    setAnchor(e.currentTarget);
+    if (thumb === undefined) {
+      void (async () => {
+        try {
+          setThumb((await api.getGcodeThumbnail(printerId, file.path)) ?? null);
+        } catch {
+          setThumb(null);
+        }
+      })();
+    }
+  };
+
+  return (
+    <>
+      <Box
+        component="span"
+        onMouseEnter={onEnter}
+        onMouseLeave={() => setAnchor(null)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}
+      >
+        <InsertDriveFileOutlinedIcon fontSize="small" color="disabled" />
+        <span>{baseName(file.path)}</span>
+      </Box>
+      <Popper
+        open={Boolean(anchor) && Boolean(thumb)}
+        anchorEl={anchor}
+        placement="right"
+        sx={{ pointerEvents: 'none', zIndex: (theme) => theme.zIndex.tooltip }}
+        modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
+      >
+        <Paper elevation={6} sx={{ p: 0.5 }}>
+          <Box
+            component="img"
+            src={thumb ?? undefined}
+            alt=""
+            sx={{ display: 'block', width: 180, height: 180, objectFit: 'contain' }}
+          />
+        </Paper>
+      </Popper>
+    </>
+  );
+}
+
+/** Folder name (click to open) + a hover popup with its child counts. */
+function FolderNameCell({
+  folder,
+  onOpen,
+}: {
+  folder: FolderInfo;
+  onOpen: () => void;
+}): JSX.Element {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  return (
+    <>
+      <Box
+        component="span"
+        onMouseEnter={(e) => setAnchor(e.currentTarget)}
+        onMouseLeave={() => setAnchor(null)}
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}
+      >
+        <FolderIcon fontSize="small" color="warning" />
+        <Link
+          component="button"
+          type="button"
+          underline="hover"
+          color="inherit"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+        >
+          {folder.name}
+        </Link>
+      </Box>
+      <Popper
+        open={Boolean(anchor)}
+        anchorEl={anchor}
+        placement="right"
+        sx={{ pointerEvents: 'none', zIndex: (theme) => theme.zIndex.tooltip }}
+        modifiers={[{ name: 'offset', options: { offset: [0, 8] } }]}
+      >
+        <Paper elevation={6} sx={{ px: 1, py: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            {plural(folder.fileCount, 'file')}, {plural(folder.folderCount, 'folder')}
+          </Typography>
+        </Paper>
+      </Popper>
+    </>
+  );
+}
 
 // --- slicer settings dialog -------------------------------------------------
 
@@ -441,16 +597,16 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
   const [actionError, setActionError] = useState<string>();
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Selection (checkbox set) + context menu + dialogs.
+  // Selection (checkbox set, kind-prefixed keys) + context menu + dialogs.
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
-  // The file the context menu was opened on (independent of the checkbox set).
-  const [menuPath, setMenuPath] = useState<string>();
-  const [renameTarget, setRenameTarget] = useState<string>();
+  // The row the context menu was opened on (independent of the checkbox set).
+  const [menuKey, setMenuKey] = useState<string>();
+  const [renameTarget, setRenameTarget] = useState<FileTarget>();
   const [renameValue, setRenameValue] = useState('');
-  const [moveTargets, setMoveTargets] = useState<string[]>();
+  const [moveTargets, setMoveTargets] = useState<FileTarget[]>();
   const [moveDest, setMoveDest] = useState('');
-  const [deleteTargets, setDeleteTargets] = useState<string[]>();
+  const [deleteTargets, setDeleteTargets] = useState<FileTarget[]>();
   const [slicerPath, setSlicerPath] = useState<string>();
   const [comparePaths, setComparePaths] = useState<{ a: string; b: string }>();
 
@@ -496,42 +652,54 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
     };
   }, [printerId, refreshKey]);
 
-  const { folders, files: filesHere } = useMemo(() => listDir(files, dir), [files, dir]);
+  const rows = useMemo(() => listEntries(files, dir), [files, dir]);
   const segments = dir ? dir.split('/') : [];
   const refresh = (): void => setRefreshKey((k) => k + 1);
 
   // Columns for the reusable DataTable: a fixed "Name" column plus the
-  // configurable metadata columns, each adapting a {@link ColumnDef} to a row.
-  const tableColumns = useMemo<DataTableColumn<FileEntry>[]>(() => {
+  // configurable metadata columns. Folders show recursive size + latest-modified
+  // and a dash elsewhere; files render their metadata via {@link ColumnDef}.
+  const tableColumns = useMemo<DataTableColumn<FileRow>[]>(() => {
     const toRow = (file: FileEntry): RowData => ({
       file,
       meta: meta[file.path],
       lastJob: lastJobs[file.path],
     });
-    const nameColumn: DataTableColumn<FileEntry> = {
+    const nameColumn: DataTableColumn<FileRow> = {
       id: 'name',
       label: 'Name',
       fixed: true,
-      sortValue: (file) => baseName(file.path).toLowerCase(),
-      render: (file) => (
-        <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-          <InsertDriveFileOutlinedIcon fontSize="small" color="disabled" />
-          <span>{baseName(file.path)}</span>
-        </Stack>
-      ),
+      sortValue: (row) =>
+        row.kind === 'folder' ? row.folder.name.toLowerCase() : baseName(row.file.path).toLowerCase(),
+      render: (row) =>
+        row.kind === 'folder' ? (
+          <FolderNameCell folder={row.folder} onOpen={() => setDir(row.folder.path)} />
+        ) : (
+          <FileNameCell printerId={printerId} file={row.file} />
+        ),
     };
-    const metaColumns: DataTableColumn<FileEntry>[] = Object.values(FileColumnId).map((id) => {
+    const metaColumns: DataTableColumn<FileRow>[] = Object.values(FileColumnId).map((id) => {
       const def = COLUMNS[id];
       return {
         id,
         label: def.label,
         align: def.align,
-        render: (file) => def.value(toRow(file)),
-        sortValue: (file) => def.sort(toRow(file)),
+        render: (row) => {
+          if (row.kind === 'file') return def.value(toRow(row.file));
+          if (id === FileColumnId.FILE_SIZE) return fmtBytes(row.folder.size);
+          if (id === FileColumnId.LAST_MODIFIED) return opt(row.folder.modified, fmtDate);
+          return '—';
+        },
+        sortValue: (row) => {
+          if (row.kind === 'file') return def.sort(toRow(row.file));
+          if (id === FileColumnId.FILE_SIZE) return row.folder.size;
+          if (id === FileColumnId.LAST_MODIFIED) return row.folder.modified;
+          return undefined;
+        },
       };
     });
     return [nameColumn, ...metaColumns];
-  }, [meta, lastJobs]);
+  }, [meta, lastJobs, printerId]);
 
   // Every directory in the tree (for the Move dialog's folder picker).
   const allDirs = useMemo(() => {
@@ -548,14 +716,17 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
     return [...dirs].sort((a, b) => a.localeCompare(b));
   }, [files]);
 
-  const openMenu = (event: MouseEvent, path: string): void => {
+  const openMenu = (event: MouseEvent, key: string): void => {
     event.preventDefault();
-    setMenuPath(path);
+    setMenuKey(key);
     setMenuPos({ x: event.clientX, y: event.clientY });
   };
   const closeMenu = (): void => setMenuPos(null);
 
-  const selectedPaths = [...selected];
+  const selectedKeys = [...selected];
+  const selectedTargets = selectedKeys.map(parseKey);
+  // Paths of selected *files* only (folders can't print/download/compare).
+  const selectedFiles = selectedKeys.filter((k) => !k.startsWith('d:')).map((k) => k.slice(2));
 
   // --- actions (each clears selection + refreshes where it mutates) ---
 
@@ -578,26 +749,26 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
     for (const path of paths) void api.downloadFile(printerId, path);
   };
 
-  const beginRename = (path: string): void => {
+  const beginRename = (target: FileTarget): void => {
     closeMenu();
-    setRenameTarget(path);
-    setRenameValue(baseName(path));
+    setRenameTarget(target);
+    setRenameValue(baseName(target.path));
   };
   const confirmRename = (): void => {
     const target = renameTarget;
     if (!target) return;
-    const dest = joinPath(dirName(target), renameValue.trim());
+    const dest = joinPath(dirName(target.path), renameValue.trim());
     setRenameTarget(undefined);
     void runAction(async () => {
-      await api.moveFile(printerId, target, dest);
+      await api.moveEntry(printerId, target.path, dest);
       setSelected(new Set());
       refresh();
     });
   };
 
-  const beginMove = (paths: string[]): void => {
+  const beginMove = (targets: FileTarget[]): void => {
     closeMenu();
-    setMoveTargets(paths);
+    setMoveTargets(targets);
     setMoveDest(dir);
   };
   const confirmMove = (): void => {
@@ -605,23 +776,25 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
     const destDir = moveDest.trim().replace(/^\/+|\/+$/g, '');
     setMoveTargets(undefined);
     void runAction(async () => {
-      for (const path of targets) {
-        await api.moveFile(printerId, path, joinPath(destDir, baseName(path)));
+      for (const target of targets) {
+        await api.moveEntry(printerId, target.path, joinPath(destDir, baseName(target.path)));
       }
       setSelected(new Set());
       refresh();
     });
   };
 
-  const beginDelete = (paths: string[]): void => {
+  const beginDelete = (targets: FileTarget[]): void => {
     closeMenu();
-    setDeleteTargets(paths);
+    setDeleteTargets(targets);
   };
   const confirmDelete = (): void => {
     const targets = deleteTargets ?? [];
     setDeleteTargets(undefined);
     void runAction(async () => {
-      for (const path of targets) await api.deleteFile(printerId, path);
+      for (const target of targets) {
+        await api.deleteEntry(printerId, target.path, target.isDir);
+      }
       setSelected(new Set());
       refresh();
     });
@@ -637,17 +810,23 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
     setComparePaths({ a, b });
   };
   const compareTwoChecked = (): void => {
-    const [a, b] = selectedPaths;
+    const [a, b] = selectedFiles;
     if (a && b) openCompare(a, b);
   };
 
-  // Context-menu shape: a checked multi-selection (when right-clicking inside it)
-  // gets bulk actions; anything else gets single-file actions for the clicked
-  // file. A single *other* checked file enables "compare with selected".
-  const menuIsMulti = menuPath !== undefined && selected.has(menuPath) && selectedPaths.length >= 2;
-  const otherChecked =
-    selectedPaths.length === 1 && menuPath !== undefined && selectedPaths[0] !== menuPath
-      ? selectedPaths[0]
+  // Context-menu shape: right-clicking inside a checked multi-selection gets bulk
+  // actions; otherwise the clicked row gets single-item actions (files get more
+  // than folders). A single *other* checked file enables "compare with selected".
+  const menuTarget = menuKey ? parseKey(menuKey) : undefined;
+  const menuIsMulti = menuKey !== undefined && selected.has(menuKey) && selectedKeys.length >= 2;
+  const canCompareChecked = selectedKeys.length === 2 && selectedFiles.length === 2;
+  const otherCheckedFile =
+    selectedKeys.length === 1 &&
+    selectedFiles.length === 1 &&
+    menuTarget !== undefined &&
+    !menuTarget.isDir &&
+    selectedFiles[0] !== menuTarget.path
+      ? selectedFiles[0]
       : undefined;
 
   const breadcrumbs = (
@@ -690,15 +869,16 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
         </Typography>
       )}
 
-      <DataTable<FileEntry>
+      <DataTable<FileRow>
         tableId="files"
         columns={tableColumns}
-        rows={filesHere}
-        getRowKey={(file) => file.path}
+        rows={rows}
+        getRowKey={(row) => row.key}
         defaultSort={{ column: 'name', direction: 'asc' }}
+        sortGroup={(row) => (row.kind === 'folder' ? 0 : 1)}
         selection={{ selectedKeys: selected, onChange: (keys) => setSelected(keys) }}
-        onRowContextMenu={(file, e) => openMenu(e, file.path)}
-        isEmpty={!loading && folders.length === 0 && filesHere.length === 0}
+        onRowContextMenu={(row, e) => openMenu(e, row.key)}
+        isEmpty={!loading && rows.length === 0}
         emptyMessage="No files here."
         maxHeight={320}
         fillHeight={Boolean(maximized)}
@@ -706,12 +886,12 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
         toolbar={
           <>
             {breadcrumbs}
-            {selectedPaths.length > 0 && (
+            {selectedKeys.length > 0 && (
               <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-                {selectedPaths.length} selected
+                {selectedKeys.length} selected
               </Typography>
             )}
-            {selectedPaths.length === 2 && (
+            {canCompareChecked && (
               <Button
                 size="small"
                 startIcon={<CompareArrowsIcon fontSize="small" />}
@@ -726,38 +906,21 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
             </IconButton>
           </>
         }
-        prefixRows={(cols) => (
-          <>
-            {dir && (
-              <TableRow
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => setDir(segments.slice(0, -1).join('/'))}
-              >
-                <TableCell colSpan={cols}>
-                  <Typography variant="body2" color="text.secondary">
-                    ‹ ..
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            )}
-            {folders.map((folder) => (
-              <TableRow
-                key={`d:${folder}`}
-                hover
-                sx={{ cursor: 'pointer' }}
-                onClick={() => setDir(dir ? `${dir}/${folder}` : folder)}
-              >
-                <TableCell colSpan={cols}>
-                  <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
-                    <FolderIcon fontSize="small" color="warning" />
-                    <span>{folder}</span>
-                  </Stack>
-                </TableCell>
-              </TableRow>
-            ))}
-          </>
-        )}
+        prefixRows={(cols) =>
+          dir ? (
+            <TableRow
+              hover
+              sx={{ cursor: 'pointer' }}
+              onClick={() => setDir(segments.slice(0, -1).join('/'))}
+            >
+              <TableCell colSpan={cols}>
+                <Typography variant="body2" color="text.secondary">
+                  ‹ ..
+                </Typography>
+              </TableCell>
+            </TableRow>
+          ) : null
+        }
       />
 
       {/* Right-click context menu (single-file vs checked multi-selection). */}
@@ -769,23 +932,22 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
       >
         {menuIsMulti
           ? [
-              <MenuItem key="download" onClick={() => doDownload(selectedPaths)}>
-                <ListItemIcon>
-                  <DownloadIcon fontSize="small" />
-                </ListItemIcon>
-                <ListItemText>Download selected ({selectedPaths.length})</ListItemText>
-              </MenuItem>,
-              <MenuItem key="move" onClick={() => beginMove(selectedPaths)}>
+              selectedFiles.length > 0 ? (
+                <MenuItem key="download" onClick={() => doDownload(selectedFiles)}>
+                  <ListItemIcon>
+                    <DownloadIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Download selected ({selectedFiles.length})</ListItemText>
+                </MenuItem>
+              ) : null,
+              <MenuItem key="move" onClick={() => beginMove(selectedTargets)}>
                 <ListItemIcon>
                   <DriveFileMoveIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>Move selected ({selectedPaths.length})</ListItemText>
+                <ListItemText>Move selected ({selectedKeys.length})</ListItemText>
               </MenuItem>,
-              selectedPaths.length === 2 ? (
-                <MenuItem
-                  key="compare"
-                  onClick={compareTwoChecked}
-                >
+              canCompareChecked ? (
+                <MenuItem key="compare" onClick={compareTwoChecked}>
                   <ListItemIcon>
                     <CompareArrowsIcon fontSize="small" />
                   </ListItemIcon>
@@ -793,67 +955,92 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
                 </MenuItem>
               ) : null,
               <Divider key="div" />,
-              <MenuItem key="delete" onClick={() => beginDelete(selectedPaths)}>
+              <MenuItem key="delete" onClick={() => beginDelete(selectedTargets)}>
                 <ListItemIcon>
                   <DeleteIcon fontSize="small" color="error" />
                 </ListItemIcon>
-                <ListItemText>Delete selected ({selectedPaths.length})</ListItemText>
+                <ListItemText>Delete selected ({selectedKeys.length})</ListItemText>
               </MenuItem>,
             ]
-          : menuPath
-            ? [
-                <MenuItem key="print" onClick={() => doPrint(menuPath)}>
-                  <ListItemIcon>
-                    <PrintIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Print file</ListItemText>
-                </MenuItem>,
-                <MenuItem key="download" onClick={() => doDownload([menuPath])}>
-                  <ListItemIcon>
-                    <DownloadIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Download</ListItemText>
-                </MenuItem>,
-                <MenuItem key="rename" onClick={() => beginRename(menuPath)}>
-                  <ListItemIcon>
-                    <DriveFileRenameOutlineIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Rename</ListItemText>
-                </MenuItem>,
-                <MenuItem key="move" onClick={() => beginMove([menuPath])}>
-                  <ListItemIcon>
-                    <DriveFileMoveIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>Move</ListItemText>
-                </MenuItem>,
-                <MenuItem key="slicer" onClick={() => viewSlicer(menuPath)}>
-                  <ListItemIcon>
-                    <TuneIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>View Slicer Settings</ListItemText>
-                </MenuItem>,
-                otherChecked ? (
-                  <MenuItem key="compare" onClick={() => openCompare(otherChecked, menuPath)}>
+          : menuTarget
+            ? menuTarget.isDir
+              ? [
+                  <MenuItem key="rename" onClick={() => beginRename(menuTarget)}>
                     <ListItemIcon>
-                      <CompareArrowsIcon fontSize="small" />
+                      <DriveFileRenameOutlineIcon fontSize="small" />
                     </ListItemIcon>
-                    <ListItemText>Compare slicer settings with selected file</ListItemText>
-                  </MenuItem>
-                ) : null,
-                <Divider key="div" />,
-                <MenuItem key="delete" onClick={() => beginDelete([menuPath])}>
-                  <ListItemIcon>
-                    <DeleteIcon fontSize="small" color="error" />
-                  </ListItemIcon>
-                  <ListItemText>Delete</ListItemText>
-                </MenuItem>,
-              ]
+                    <ListItemText>Rename folder</ListItemText>
+                  </MenuItem>,
+                  <MenuItem key="move" onClick={() => beginMove([menuTarget])}>
+                    <ListItemIcon>
+                      <DriveFileMoveIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Move folder</ListItemText>
+                  </MenuItem>,
+                  <Divider key="div" />,
+                  <MenuItem key="delete" onClick={() => beginDelete([menuTarget])}>
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" color="error" />
+                    </ListItemIcon>
+                    <ListItemText>Delete folder</ListItemText>
+                  </MenuItem>,
+                ]
+              : [
+                  <MenuItem key="print" onClick={() => doPrint(menuTarget.path)}>
+                    <ListItemIcon>
+                      <PrintIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Print file</ListItemText>
+                  </MenuItem>,
+                  <MenuItem key="download" onClick={() => doDownload([menuTarget.path])}>
+                    <ListItemIcon>
+                      <DownloadIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Download</ListItemText>
+                  </MenuItem>,
+                  <MenuItem key="rename" onClick={() => beginRename(menuTarget)}>
+                    <ListItemIcon>
+                      <DriveFileRenameOutlineIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Rename</ListItemText>
+                  </MenuItem>,
+                  <MenuItem key="move" onClick={() => beginMove([menuTarget])}>
+                    <ListItemIcon>
+                      <DriveFileMoveIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Move</ListItemText>
+                  </MenuItem>,
+                  <MenuItem key="slicer" onClick={() => viewSlicer(menuTarget.path)}>
+                    <ListItemIcon>
+                      <TuneIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>View Slicer Settings</ListItemText>
+                  </MenuItem>,
+                  otherCheckedFile ? (
+                    <MenuItem
+                      key="compare"
+                      onClick={() => openCompare(otherCheckedFile, menuTarget.path)}
+                    >
+                      <ListItemIcon>
+                        <CompareArrowsIcon fontSize="small" />
+                      </ListItemIcon>
+                      <ListItemText>Compare slicer settings with selected file</ListItemText>
+                    </MenuItem>
+                  ) : null,
+                  <Divider key="div" />,
+                  <MenuItem key="delete" onClick={() => beginDelete([menuTarget])}>
+                    <ListItemIcon>
+                      <DeleteIcon fontSize="small" color="error" />
+                    </ListItemIcon>
+                    <ListItemText>Delete</ListItemText>
+                  </MenuItem>,
+                ]
             : null}
       </Menu>
 
       {/* Rename dialog */}
       <Dialog open={renameTarget !== undefined} onClose={() => setRenameTarget(undefined)}>
-        <DialogTitle>Rename file</DialogTitle>
+        <DialogTitle>Rename {renameTarget?.isDir ? 'folder' : 'file'}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
@@ -876,7 +1063,7 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
 
       {/* Move dialog — pick a destination folder (or type a new one). */}
       <Dialog open={moveTargets !== undefined} onClose={() => setMoveTargets(undefined)}>
-        <DialogTitle>Move {moveTargets?.length ?? 0} file(s)</DialogTitle>
+        <DialogTitle>Move {moveTargets?.length ?? 0} item(s)</DialogTitle>
         <DialogContent>
           <Box
             sx={{
@@ -928,10 +1115,11 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
 
       {/* Delete confirmation */}
       <Dialog open={deleteTargets !== undefined} onClose={() => setDeleteTargets(undefined)}>
-        <DialogTitle>Delete {deleteTargets?.length ?? 0} file(s)?</DialogTitle>
+        <DialogTitle>Delete {deleteTargets?.length ?? 0} item(s)?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This permanently removes the selected file(s) from the printer.
+            This permanently removes the selected item(s) from the printer. Folders are deleted
+            recursively, including all of their contents.
           </Typography>
         </DialogContent>
         <DialogActions>

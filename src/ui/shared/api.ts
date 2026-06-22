@@ -74,12 +74,14 @@ export const api = {
     sendRequest<readonly FileEntry[]>({ type: RequestType.LIST_FILES, printerId }),
   getGcodeMetadata: (printerId: string) =>
     sendRequest<GcodeMetadataMap>({ type: RequestType.GET_GCODE_METADATA, printerId }),
-  deleteFile: (printerId: string, path: string) =>
-    sendRequest<void>({ type: RequestType.DELETE_FILE, printerId, path }),
-  moveFile: (printerId: string, source: string, dest: string) =>
-    sendRequest<void>({ type: RequestType.MOVE_FILE, printerId, source, dest }),
+  deleteEntry: (printerId: string, path: string, isDir: boolean) =>
+    sendRequest<void>({ type: RequestType.DELETE_ENTRY, printerId, path, isDir }),
+  moveEntry: (printerId: string, source: string, dest: string) =>
+    sendRequest<void>({ type: RequestType.MOVE_ENTRY, printerId, source, dest }),
   downloadFile: (printerId: string, path: string) =>
     sendRequest<void>({ type: RequestType.DOWNLOAD_FILE, printerId, path }),
+  getGcodeThumbnail: (printerId: string, path: string) =>
+    sendRequest<string | undefined>({ type: RequestType.GET_GCODE_THUMBNAIL, printerId, path }),
   getSlicerSettings: (printerId: string, path: string) =>
     sendRequest<SlicerSettings>({ type: RequestType.GET_SLICER_SETTINGS, printerId, path }),
 

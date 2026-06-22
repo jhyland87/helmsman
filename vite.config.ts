@@ -34,6 +34,9 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
     rollupOptions: {
+      treeshake: {
+        moduleSideEffects: false // Forces the build to ignore implied side effects
+      },
       input: {
         popup: here('./index.html'),
         options: here('./options.html'),

@@ -5,17 +5,20 @@
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import HistoryIcon from '@mui/icons-material/History';
 import MemoryIcon from '@mui/icons-material/Memory';
+import MenuIcon from '@mui/icons-material/Menu';
 import PrintIcon from '@mui/icons-material/Print';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import {
   Box,
   Divider,
+  IconButton,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
   Stack,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import { useState, type ReactNode } from 'react';
@@ -124,50 +127,86 @@ export function OptionsApp(): JSX.Element {
     }
   };
 
+  const collapsed = settings.navCollapsed;
+
+  const renderNavItem = (key: string, labelKey: MessageKey, icon: ReactNode): JSX.Element => (
+    <Tooltip key={key} title={collapsed ? t(labelKey) : ''} placement="right">
+      <ListItemButton
+        selected={page === key}
+        onClick={() => setPage(key)}
+        sx={{ justifyContent: collapsed ? 'center' : 'flex-start', px: collapsed ? 1.5 : 2 }}
+      >
+        <ListItemIcon sx={{ minWidth: collapsed ? 0 : 36 }}>{icon}</ListItemIcon>
+        {!collapsed && <ListItemText primary={t(labelKey)} />}
+      </ListItemButton>
+    </Tooltip>
+  );
+
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+    <Box sx={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Box
         component="nav"
-        sx={{ width: 240, flexShrink: 0, borderRight: 1, borderColor: 'divider' }}
+        sx={{
+          width: collapsed ? 64 : 240,
+          flexShrink: 0,
+          borderRight: 1,
+          borderColor: 'divider',
+          height: '100vh',
+          overflowY: 'auto',
+          transition: 'width 0.2s',
+        }}
       >
-        <Typography variant="h6" sx={{ p: 2, fontWeight: 700 }}>
-          {t('app.title')}
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: collapsed ? 'center' : 'space-between',
+            gap: 1,
+            px: collapsed ? 0 : 2,
+            py: 1.5,
+          }}
+        >
+          {!collapsed && (
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              {t('app.title')}
+            </Typography>
+          )}
+          <IconButton
+            size="small"
+            aria-label="toggle menu"
+            onClick={() => void update({ navCollapsed: !collapsed })}
+          >
+            <MenuIcon fontSize="small" />
+          </IconButton>
+        </Box>
         <Divider />
         <List>
-          {NAV.map((item) => (
-            <ListItemButton
-              key={item.page}
-              selected={page === item.page}
-              onClick={() => setPage(item.page)}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={t(item.labelKey)} />
-            </ListItemButton>
-          ))}
+          {NAV.map((item) => renderNavItem(item.page, item.labelKey, item.icon))}
           {PANEL_NAV.length > 0 && <Divider sx={{ my: 1 }} />}
-          {PANEL_NAV.map((def) => (
-            <ListItemButton
-              key={def.id}
-              selected={page === def.id}
-              onClick={() => setPage(def.id)}
-            >
-              <ListItemIcon>{def.navIcon}</ListItemIcon>
-              <ListItemText primary={t(def.titleKey)} />
-            </ListItemButton>
-          ))}
+          {PANEL_NAV.map((def) => renderNavItem(def.id, def.titleKey, def.navIcon))}
         </List>
       </Box>
 
-      <Box sx={{ flexGrow: 1, minWidth: 0, p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 2 }}>
+      <Box sx={{ flexGrow: 1, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: 1,
+            px: 3,
+            py: 2,
+            flexShrink: 0,
+            borderBottom: 1,
+            borderColor: 'divider',
+          }}
+        >
           <PrinterSelector
             activePrinterId={settings.activePrinterId}
             onChange={(id) => void update({ activePrinterId: id })}
           />
           <EmergencyStopButton printerId={settings.activePrinterId ?? printers[0]?.id} />
         </Box>
-        {renderPage()}
+        <Box sx={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: 'auto', p: 3 }}>{renderPage()}</Box>
       </Box>
     </Box>
   );

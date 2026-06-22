@@ -160,12 +160,16 @@ export class MessageRouter {
         return this.manager.getDriver(request.printerId).listGcodeFiles();
       case RequestType.GET_GCODE_METADATA:
         return this.manager.getDriver(request.printerId).getGcodeMetadata();
-      case RequestType.DELETE_FILE:
-        return this.manager.getDriver(request.printerId).deleteGcodeFile(request.path);
-      case RequestType.MOVE_FILE:
+      case RequestType.DELETE_ENTRY:
         return this.manager
           .getDriver(request.printerId)
-          .moveGcodeFile(request.source, request.dest);
+          .deleteGcodeEntry(request.path, request.isDir);
+      case RequestType.MOVE_ENTRY:
+        return this.manager
+          .getDriver(request.printerId)
+          .moveGcodeEntry(request.source, request.dest);
+      case RequestType.GET_GCODE_THUMBNAIL:
+        return this.manager.getDriver(request.printerId).getGcodeThumbnail(request.path);
       case RequestType.GET_SLICER_SETTINGS:
         return this.manager.getDriver(request.printerId).getSlicerSettings(request.path);
       case RequestType.DOWNLOAD_FILE: {

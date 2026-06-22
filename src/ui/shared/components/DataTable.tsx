@@ -80,6 +80,11 @@ export interface DataTableProps<T> {
   readonly getRowKey: (row: T) => string;
   /** Sort applied when nothing is persisted yet. */
   readonly defaultSort?: TableSortState;
+  /**
+   * Optional primary grouping: rows are ordered by this ascending value first
+   * (e.g. folders=0 before files=1), then by the active column within a group.
+   */
+  readonly sortGroup?: (row: T) => number;
   readonly selection?: DataTableSelection;
   readonly onRowClick?: (row: T, event: MouseEvent) => void;
   readonly onRowContextMenu?: (row: T, event: MouseEvent) => void;
@@ -186,6 +191,7 @@ export function DataTable<T>({
   rows,
   getRowKey,
   defaultSort,
+  sortGroup,
   selection,
   onRowClick,
   onRowContextMenu,
@@ -249,10 +255,17 @@ export function DataTable<T>({
 
   const sortedRows = useMemo(() => {
     const col = sort ? byId[sort.column] : undefined;
-    if (!sort || !col?.sortValue) return rows;
-    const get = col.sortValue;
-    return [...rows].sort((a, b) => compareSort(get(a), get(b), sort.direction));
-  }, [rows, sort, byId]);
+    const get = col?.sortValue;
+    if (!sortGroup && !get) return rows;
+    return [...rows].sort((a, b) => {
+      if (sortGroup) {
+        const group = sortGroup(a) - sortGroup(b);
+        if (group !== 0) return group;
+      }
+      if (get && sort) return compareSort(get(a), get(b), sort.direction);
+      return 0;
+    });
+  }, [rows, sort, byId, sortGroup]);
 
   // --- selection ---
   const handleRowClick = (row: T, event: MouseEvent): void => {
@@ -320,12 +333,21 @@ export function DataTable<T>({
         )}
       </Stack>
 
-      <Box sx={{ overflow: 'auto', ...(fillHeight ? { flex: 1, minHeight: 0 } : { maxHeight }) }}>
-        <Table size="small" sx={tableSx}>
-          <TableHead>
+      <Box
+        sx={
+          fillHeight
+            ? { overflow: 'auto', flex: 1, minHeight: 0 }
+            : maxHeight !== undefined
+              ? { overflow: 'auto', maxHeight }
+              : // No internal scroll: let sticky headers pin to the page's scroll area.
+                { overflow: 'visible' }
+        }
+      >
+        <Table size="small" stickyHeader sx={tableSx}>
+          <TableHead sx={{ '& .MuiTableCell-stickyHeader': { bgcolor: 'background.paper' } }}>
             <TableRow>
               {selection && (
-                <TableCell padding="checkbox">
+                <TableCell padding="checkbox" sx={{ bgcolor: 'background.paper' }}>
                   <Checkbox
                     size="small"
                     checked={allSelected}

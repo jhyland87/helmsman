@@ -92,9 +92,10 @@ export enum RequestType {
   GET_CONSOLE_BACKLOG = 'get_console_backlog',
   LIST_FILES = 'list_files',
   GET_GCODE_METADATA = 'get_gcode_metadata',
-  DELETE_FILE = 'delete_file',
-  MOVE_FILE = 'move_file',
+  DELETE_ENTRY = 'delete_entry',
+  MOVE_ENTRY = 'move_entry',
   DOWNLOAD_FILE = 'download_file',
+  GET_GCODE_THUMBNAIL = 'get_gcode_thumbnail',
   GET_SLICER_SETTINGS = 'get_slicer_settings',
   // per-printer remote settings (Moonraker database)
   PRINTER_GET_SETTINGS = 'printer_get_settings',
@@ -128,9 +129,10 @@ export type BackgroundRequest =
   | ({ type: RequestType.GET_CONSOLE_BACKLOG; count?: number } & ForPrinter)
   | ({ type: RequestType.LIST_FILES } & ForPrinter)
   | ({ type: RequestType.GET_GCODE_METADATA } & ForPrinter)
-  | ({ type: RequestType.DELETE_FILE; path: string } & ForPrinter)
-  | ({ type: RequestType.MOVE_FILE; source: string; dest: string } & ForPrinter)
+  | ({ type: RequestType.DELETE_ENTRY; path: string; isDir: boolean } & ForPrinter)
+  | ({ type: RequestType.MOVE_ENTRY; source: string; dest: string } & ForPrinter)
   | ({ type: RequestType.DOWNLOAD_FILE; path: string } & ForPrinter)
+  | ({ type: RequestType.GET_GCODE_THUMBNAIL; path: string } & ForPrinter)
   | ({ type: RequestType.GET_SLICER_SETTINGS; path: string } & ForPrinter)
   | ({ type: RequestType.PRINTER_GET_SETTINGS; key: string } & ForPrinter)
   | ({ type: RequestType.PRINTER_SET_SETTINGS; key: string; value: unknown } & ForPrinter)
