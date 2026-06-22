@@ -23,12 +23,15 @@ import {
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import ClearIcon from '@mui/icons-material/Clear';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
+import SearchIcon from '@mui/icons-material/Search';
 import ViewColumnIcon from '@mui/icons-material/ViewColumn';
 import {
   Box,
   Checkbox,
   IconButton,
+  InputAdornment,
   Popover,
   Stack,
   Table,
@@ -37,6 +40,7 @@ import {
   TableHead,
   TableRow,
   TableSortLabel,
+  TextField,
   Typography,
 } from '@mui/material';
 import { useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
@@ -61,6 +65,11 @@ export interface DataTableColumn<T> {
   readonly render: (row: T) => ReactNode;
   /** Provide to make the column sortable; omit for a non-sortable column. */
   readonly sortValue?: (row: T) => SortValue;
+  /**
+   * Text this column contributes to live search. Defaults to {@link sortValue}
+   * when it yields a string/number; set this to search formatted text instead.
+   */
+  readonly searchValue?: (row: T) => string | undefined;
   /** Fixed columns always render first and aren't shown in the column picker. */
   readonly fixed?: boolean;
   readonly width?: number | string;
@@ -90,8 +99,11 @@ export interface DataTableProps<T> {
   readonly onRowContextMenu?: (row: T, event: MouseEvent) => void;
   /** Rows rendered at the top of the body (e.g. folders); given the column span. */
   readonly prefixRows?: (totalColumns: number) => ReactNode;
-  /** Toolbar content rendered left of the column-picker button. */
+  /** Toolbar content rendered left of the search box + column-picker button. */
   readonly toolbar?: ReactNode;
+  /** Show a live-search box that filters rows (default true). */
+  readonly searchable?: boolean;
+  readonly searchPlaceholder?: string;
   /** Override the empty check (defaults to `rows.length === 0`). */
   readonly isEmpty?: boolean;
   readonly emptyMessage?: string;
@@ -197,6 +209,8 @@ export function DataTable<T>({
   onRowContextMenu,
   prefixRows,
   toolbar,
+  searchable = true,
+  searchPlaceholder,
   isEmpty,
   emptyMessage,
   maxHeight,
@@ -206,6 +220,7 @@ export function DataTable<T>({
   const { settings, update } = useSettings();
   const persisted = settings.tables[tableId];
   const [colAnchor, setColAnchor] = useState<HTMLElement | null>(null);
+  const [query, setQuery] = useState('');
   const anchorKey = useRef<string | undefined>(undefined);
 
   const byId = useMemo(() => {
@@ -253,11 +268,27 @@ export function DataTable<T>({
     saveTable({ sort: { column: id, direction } });
   };
 
+  // Live search: filter rows by each column's searchValue (or its sortValue).
+  const filteredRows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return rows;
+    const textOf = (row: T): string =>
+      columns
+        .map((c) => {
+          if (c.searchValue) return c.searchValue(row) ?? '';
+          const value = c.sortValue?.(row);
+          return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+        })
+        .join(' ')
+        .toLowerCase();
+    return rows.filter((row) => textOf(row).includes(q));
+  }, [rows, query, columns]);
+
   const sortedRows = useMemo(() => {
     const col = sort ? byId[sort.column] : undefined;
     const get = col?.sortValue;
-    if (!sortGroup && !get) return rows;
-    return [...rows].sort((a, b) => {
+    if (!sortGroup && !get) return filteredRows;
+    return [...filteredRows].sort((a, b) => {
       if (sortGroup) {
         const group = sortGroup(a) - sortGroup(b);
         if (group !== 0) return group;
@@ -265,7 +296,7 @@ export function DataTable<T>({
       if (get && sort) return compareSort(get(a), get(b), sort.direction);
       return 0;
     });
-  }, [rows, sort, byId, sortGroup]);
+  }, [filteredRows, sort, byId, sortGroup]);
 
   // --- selection ---
   const handleRowClick = (row: T, event: MouseEvent): void => {
@@ -315,13 +346,40 @@ export function DataTable<T>({
     selection.onChange(allSelected ? new Set() : new Set(sortedRows.map(getRowKey)));
   };
 
-  const showEmpty = isEmpty ?? rows.length === 0;
+  const noMatches = query.trim() !== '' && filteredRows.length === 0;
+  const showEmpty = noMatches || (isEmpty ?? rows.length === 0);
   const clickable = selection !== undefined || onRowClick !== undefined;
 
   return (
     <Stack spacing={1} sx={fillHeight ? { flex: 1, minHeight: 0 } : undefined}>
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexShrink: 0 }}>
         {toolbar ?? <Box sx={{ flexGrow: 1 }} />}
+        {searchable && (
+          <TextField
+            size="small"
+            variant="outlined"
+            placeholder={searchPlaceholder ?? 'Search…'}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            sx={{ width: 180, flexShrink: 0 }}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+                endAdornment: query ? (
+                  <InputAdornment position="end">
+                    <IconButton size="small" aria-label="clear search" onClick={() => setQuery('')}>
+                      <ClearIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : undefined,
+              },
+            }}
+          />
+        )}
         {configColumns.length > 0 && (
           <IconButton
             size="small"
@@ -419,7 +477,7 @@ export function DataTable<T>({
               <TableRow>
                 <TableCell colSpan={totalColumns}>
                   <Typography variant="body2" color="text.secondary">
-                    {emptyMessage ?? 'No data.'}
+                    {noMatches ? `No matches for “${query.trim()}”.` : (emptyMessage ?? 'No data.')}
                   </Typography>
                 </TableCell>
               </TableRow>

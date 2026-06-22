@@ -880,6 +880,7 @@ export function FilesPanel({ printerId, maximized }: PanelProps): JSX.Element {
         onRowContextMenu={(row, e) => openMenu(e, row.key)}
         isEmpty={!loading && rows.length === 0}
         emptyMessage="No files here."
+        searchPlaceholder="Search this folder…"
         maxHeight={320}
         fillHeight={Boolean(maximized)}
         tableSx={{ whiteSpace: 'nowrap' }}

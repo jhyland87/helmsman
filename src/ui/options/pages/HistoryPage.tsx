@@ -121,6 +121,7 @@ export function HistoryPage(): JSX.Element {
           getRowKey={(job) => String(job.job_id)}
           defaultSort={{ column: 'start', direction: 'desc' }}
           emptyMessage="No jobs recorded."
+          searchPlaceholder="Search jobs…"
         />
       </Card>
     </Stack>
